@@ -1,0 +1,135 @@
+[
+  {
+    "title": "Yellow Potassium",
+    "text": "Which curved yellow fruit is known for being high in potassium?",
+    "answer": "banana",
+    "pointsWorth": 2,
+    "category": "fruit"
+  },
+  {
+    "title": "Halloween Staple",
+    "text": "Which large orange vegetable is commonly carved into jack-o'-lanterns?",
+    "answer": "pumpkin",
+    "pointsWorth": 2,
+    "category": "vegetable"
+  },
+  {
+    "title": "Keeps the Doctor Away",
+    "text": "According to the saying, eating one of these a day keeps the doctor away. What fruit is it?",
+    "answer": "apple",
+    "pointsWorth": 2,
+    "category": "fruit"
+  },
+  {
+    "title": "Vampire Repellent",
+    "text": "Which pungent bulb vegetable is said to ward off vampires?",
+    "answer": "garlic",
+    "pointsWorth": 3,
+    "category": "vegetable"
+  },
+  {
+    "title": "Rabbit's Favorite",
+    "text": "What orange root vegetable is stereotypically associated with rabbits?",
+    "answer": "carrot",
+    "pointsWorth": 2,
+    "category": "vegetable"
+  },
+  {
+    "title": "Green Alligator Skin",
+    "text": "Which fruit has bumpy green skin, is sometimes called an 'alligator pear', and is used to make guacamole?",
+    "answer": "avocado",
+    "pointsWorth": 3,
+    "category": "fruit"
+  },
+  {
+    "title": "Tearful Veggie",
+    "text": "Which layered vegetable often makes people cry when they cut it?",
+    "answer": "onion",
+    "pointsWorth": 2,
+    "category": "vegetable"
+  },
+  {
+    "title": "Summer Waterfall",
+    "text": "Which large green-striped fruit with red flesh is a favorite at summer picnics?",
+    "answer": "watermelon",
+    "pointsWorth": 2,
+    "category": "fruit"
+  },
+  {
+    "title": "Pizza Topping Debate",
+    "text": "Which spiky tropical fruit is a controversial pizza topping?",
+    "answer": "pineapple",
+    "pointsWorth": 3,
+    "category": "fruit"
+  },
+  {
+    "title": "Popeye's Power",
+    "text": "Which leafy green vegetable gave the cartoon character Popeye his strength?",
+    "answer": "spinach",
+    "pointsWorth": 3,
+    "category": "vegetable"
+  },
+  {
+    "title": "Berry Romantic",
+    "text": "Which red heart-shaped fruit is often dipped in chocolate for Valentine's Day?",
+    "answer": "strawberry",
+    "pointsWorth": 2,
+    "category": "fruit"
+  },
+  {
+    "title": "Sour Citrus",
+    "text": "Which sour yellow citrus fruit is commonly used to make lemonade?",
+    "answer": "lemon",
+    "pointsWorth": 2,
+    "category": "fruit"
+  },
+  {
+    "title": "Fuzzy Brown Fruit",
+    "text": "Which small fuzzy brown fruit has bright green flesh inside?",
+    "answer": "kiwi",
+    "pointsWorth": 3,
+    "category": "fruit"
+  },
+  {
+    "title": "Mini Tree Veggie",
+    "text": "Which green vegetable looks like a tiny tree and is often served with cheese sauce?",
+    "answer": "broccoli",
+    "pointsWorth": 2,
+    "category": "vegetable"
+  },
+  {
+    "title": "Tropical King",
+    "text": "Which fruit is known as the 'king of fruits' and has a strong smell that's banned in some hotels?",
+    "answer": "durian",
+    "pointsWorth": 5,
+    "category": "fruit"
+  },
+  {
+    "title": "Purple Nightshade",
+    "text": "Which glossy purple vegetable is commonly used in dishes like moussaka and baba ganoush?",
+    "answer": "eggplant",
+    "pointsWorth": 4,
+    "category": "vegetable"
+  },
+  {
+    "title": "Tropical Yellow",
+    "text": "Which tropical fruit has sweet yellow flesh and is often found on top of upside-down cakes?",
+    "answer": "mango",
+    "pointsWorth": 3,
+    "category": "fruit"
+  },
+  {
+    "title": "Wrinkly Dried Grape",
+    "text": "Grapes become this wrinkly dried fruit often found in trail mix and oatmeal cookies. What is it?",
+    "answer": "raisin",
+    "pointsWorth": 3,
+    "category": "fruit"
+  },
+  {
+    "title": "Stinky Cousin",
+    "text": "Which vegetable is related to onions and garlic, with long green stalks and a mild flavor?",
+    "answer": "leek",
+    "pointsWorth": 5,
+    "category": "vegetable"
+  }
+]
