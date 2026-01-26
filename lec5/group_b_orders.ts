@@ -1,3 +1,7 @@
+// AI Disclosure
+// This sample code was written via interactive prompting with an
+// AI agent (Claude Opus 4.5) in VS Code.
+
 /**
  * Order Processing Module
  * 
