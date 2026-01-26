@@ -1,7 +1,7 @@
 // A program that administers and grades an electronic exam.
 // (Functional style)
 
-import PromptSync from "prompt-sync";
+import { createInterface, Interface} from "node:readline/promises";
 import { readFileSync } from "fs";
 import { Randomizer } from "../util/randomization";
 
@@ -20,16 +20,21 @@ interface GradedQuestion extends AnsweredQuestion {
   readonly score: number;
 };
 
-function gradeQuestion(question: AnsweredQuestion): GradedQuestion {
-  const score = question.submission === question.answer ? question.pointsWorth : 0;
-  return { ...question, score };
-}
-
-function promptQuestion(prompt: PromptSync.Prompt, question: Question): AnsweredQuestion {
+async function promptQuestion(rl: Interface, question: Question): Promise<AnsweredQuestion> {
   console.log(`Question: ${question.title} (${question.pointsWorth} points)`);
   console.log(question.text);
-  const submission = prompt("Your answer: ") ?? "";
-  return { ...question, submission };
+  const submission = await rl.question("Your answer: ");
+  return { // new object with a submission added
+    ...question,
+    submission: submission ?? ""
+  };
+}
+
+function gradeQuestion(question: AnsweredQuestion): GradedQuestion {
+  return { // new object with a score added
+    ...question,
+    score: question.submission === question.answer ? question.pointsWorth : 0
+  };
 }
 
 function printQuestionReport(question: GradedQuestion): void {
@@ -51,55 +56,56 @@ function calculateTotalScore(questions: readonly GradedQuestion[]): number {
 
 function printExamReport(gradedQuestions: readonly GradedQuestion[]): void {
   console.log("Exam Report:");
-  const totalPoints = calculateTotalPoints(gradedQuestions);
-  const totalScore = calculateTotalScore(gradedQuestions);
 
   gradedQuestions.forEach(question => {
     printQuestionReport(question);
     console.log("---");
   });
 
+  const totalPoints = calculateTotalPoints(gradedQuestions);
+  const totalScore = calculateTotalScore(gradedQuestions);
   console.log(`Total Score: ${totalScore} / ${totalPoints}`);
 }
 
-// Function to administer an exam: prompt all questions, then grade them
-function administerExam(prompt: PromptSync.Prompt, questions: readonly Question[]): readonly GradedQuestion[] {
-  // Prompt all questions (map over questions to get answered questions)
-  const answeredQuestions = questions.map(q => promptQuestion(prompt, q));
-
-  // Grade all questions (map over answered questions to get graded questions)
-  const gradedQuestions = answeredQuestions.map(gradeQuestion);
-
-  return gradedQuestions;
+/**
+ * In the functional style, "administering an exam" is implemented as taking
+ * an array of original questions and returning a new array of answered questions.
+ * There are no "side effects" or state changes to existing objects.
+ */
+async function administerExam(rl: Interface, questions: readonly Question[]): Promise<readonly GradedQuestion[]> {
+  // This pipeline takes the original list of questions...
+  // We need to process questions sequentially (one at a time) for user input
+  const answeredQuestions: AnsweredQuestion[] = [];
+  for (const q of questions) {
+    answeredQuestions.push(await promptQuestion(rl, q));
+  }
+  return answeredQuestions.map(gradeQuestion); // ...and then maps those into graded questions.
 }
 
-// Pure function to load and parse questions from file
 function loadQuestions(filePath: string): readonly Question[] {
   const data = readFileSync(filePath, "utf-8");
-  const questionData: Question[] = JSON.parse(data);
-  return questionData;
+  return JSON.parse(data) as Question[]; // Assumes the JSON is formatted correctly
 }
 
-// Pure function to select random questions
 function selectRandomQuestions(questions: readonly Question[], count: number): readonly Question[] {
   const rand = Randomizer.create_autoseeded();
   return rand.choose_n([...questions], count);
 }
 
-function main() {
-  const prompt = PromptSync({ sigint: true });
+async function main() {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  // Load questions from file
-  const allQuestions = loadQuestions("questions.json");
+  try {
+    const allQuestions = loadQuestions("questions.json");
 
-  // Select 5 random questions
-  const selectedQuestions = selectRandomQuestions(allQuestions, 5);
+    const selectedQuestions = selectRandomQuestions(allQuestions, 5);
 
-  // Administer the exam (prompt and grade)
-  const gradedQuestions = administerExam(prompt, selectedQuestions);
+    const gradedQuestions = await administerExam(rl, selectedQuestions);
 
-  // Print the report
-  printExamReport(gradedQuestions);
+    printExamReport(gradedQuestions);
+  } finally {
+    rl.close();
+  }
 }
 
 main();

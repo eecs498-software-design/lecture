@@ -1,9 +1,10 @@
 // A program that administers and grades an electronic exam.
 // (Object-oriented style)
 
-import PromptSync from "prompt-sync"
+import { createInterface, Interface} from "node:readline/promises";
 import { readFileSync } from "fs"
 import { Randomizer } from "../util/randomization";
+import { assert } from "console";
 
 class Exam {
 
@@ -19,15 +20,19 @@ class Exam {
     this.totalPoints = total;
   }
 
-  public administerExam(prompt: PromptSync.Prompt): void {
+  public async administerExam(rl: Interface): Promise<void> {
 
+    // questions have .submission = undefined
+    // questions have .score = undefined
     for (const question of this.questions) {
-      question.promptQuestion(prompt);
+      await question.promptQuestion(rl);
     }
+    // now questions have .submission defined
 
     for (const question of this.questions) {
       question.grade();
     }
+    // now questions have .score defined
   }
 
   public printExamReport(): void {
@@ -44,7 +49,6 @@ class Exam {
   }
 }
 
-// Base class for a question
 class Question {
 
   public readonly title: string;
@@ -52,8 +56,8 @@ class Question {
   public readonly answer: string;
   public readonly pointsWorth: number;
 
-  private _submission: string | undefined;
-  private _score: number | undefined;
+  private _submission?: string; // ? means it's string | undefined
+  private _score?: number; // ? means it's string | undefined
 
   public constructor(title: string, text: string, answer: string, pointsWorth: number) {
     this.title = title;
@@ -62,6 +66,8 @@ class Question {
     this.pointsWorth = pointsWorth;
   }
 
+  // public getSubmission(): string | undefined {
+  // below version allows access via q.submission
   public get submission(): string | undefined {
     return this._submission;
   }
@@ -70,20 +76,20 @@ class Question {
     return this._score;
   }
 
+  public async promptQuestion(rl: Interface): Promise<void> {
+    console.log(`Question: ${this.title} (${this.pointsWorth} points)`);
+    console.log(this.text);
+    this._submission = await rl.question("Your answer: ");
+  }
+
   public grade(): void {
-    if (!this._submission) { return; }
+    assert(this._submission);
+    // if (!this._submission) { return; }
     if (this._submission === this.answer) {
       this._score = this.pointsWorth;
     } else {
       this._score = 0;
     }
-  }
-
-  public promptQuestion(prompt: PromptSync.Prompt): void {
-    console.log(`Question: ${this.title} (${this.pointsWorth} points)`);
-    console.log(this.text);
-    const response = prompt("Your answer: ");
-    this._submission = response;
   }
 
   public printReport(): void {
@@ -103,24 +109,27 @@ class Question {
   }
 }
 
-function main() {
-
-  // Read questions from file
-  const data = readFileSync("questions.json", "utf-8");
+function loadQuestions(filePath: string): Question[] {
+  const data = readFileSync(filePath, "utf-8");
   const questionData: { title: string; text: string; answer: string; pointsWorth: number }[] = JSON.parse(data);
-
-  // Create Exam instance with 5 random questions
   const rand = Randomizer.create_autoseeded();
   const selectedData = rand.choose_n(questionData, 5);
   const questions: Question[] = selectedData.map(q => new Question(q.title, q.text, q.answer, q.pointsWorth));
+  return questions;
+}
+
+async function main() {
+  const questions = loadQuestions("questions.json");  
 
   const exam = new Exam(questions);
 
-  // Administer the exam
-  const prompt = PromptSync({ sigint: true });
-  exam.administerExam(prompt);
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    await exam.administerExam(rl);
+  } finally {
+    rl.close();
+  }
 
-  // Print the exam report
   exam.printExamReport();
 }
 
