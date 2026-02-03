@@ -1,70 +1,63 @@
 import { Randomizer } from "./randomization";
 import { PartyGenerator } from "./party-generator";
+import { assert } from "node:console";
 
-/**
- * Represents a random dining duration at our restaurant.
- */
-export class DiningTime {
-  public readonly lowerBound: number;
-  public readonly upperBound: number;
 
-  constructor(lowerBound: number, upperBound: number) {
-    this.lowerBound = lowerBound;
-    this.upperBound = upperBound;
-  }
-
-  public interpolate(randomizer: Randomizer): number {
-    return this.lowerBound + randomizer.float() * (this.upperBound - this.lowerBound);
-  }
-}
+// The DiningTime class has been renamed to RandomDurationDist
+// and moved to the party-generator.ts file.
 
 
 /**
- * Represents a table at our restaurant and its current patrons.
+ * Represents a table at our restaurant and the party sitting there.
 */
 export class Table {
   public readonly id: number;
   public readonly capacity: number;
-
-  private patrons: Person[];
   
-  constructor(id: number, capacity: number, patrons: Person[] = []) {
+  private current_party: Party | undefined;
+  private current_party_starting_time: number | undefined;
+  
+  constructor(id: number, capacity: number) {
     this.id = id;
     this.capacity = capacity;
-    this.patrons = patrons;
+  }
+
+  public getParty() {
+    return this.current_party;
   }
 
   public isOccupied(): boolean {
-    return this.patrons.length > 0;
+    return this.current_party !== undefined;
   }
 
-  /**
-   * Attempts to add a patron to the table and returns true if successful.
-   * they are successfully added. Returns false if the table was full.
-   */
-  public addPatron(person: Person): boolean {
-    if (this.patrons.length < this.capacity) {
-      this.patrons.push(person);
-      return true;
+  public setParty(party: Party, startingTime: number) {
+    if (this.current_party) {
+      throw new Error("previous party still here");
     }
-    return false;
+    if (party.members.length > this.capacity) {
+      throw new Error("not enough room here");
+    }
+    this.current_party = party;
+    this.current_party_starting_time = startingTime;
   }
   
-  public arePatronsFinished(currentTime: number): boolean {
-    return this.patrons.every(patron => currentTime >= patron.party.actualDiningTime);
+  public isFinished(currentTime: number): boolean {
+    if (!this.current_party || !this.current_party_starting_time) { return true; }
+    return currentTime >= this.current_party_starting_time + this.current_party.diningDuration;
   }
 
-  /**
-   * Removes all patrons from the table.
-   */
   public clearTable(): void {
-    this.patrons.forEach(patron => patron.leaveTable(this));
-    this.patrons = [];
+    this.current_party = undefined;
+    this.current_party_starting_time = undefined;
   }
 
   public to_string(): string {
-    // return a string with width equal to capacity showing * for each patron
-    return `[${"*".repeat(this.patrons.length).padEnd(this.capacity, " ")}]`;
+    if (!this.current_party) {
+      return `[${" ".repeat(this.capacity)}]`;
+    }
+    else {
+      return `[${"*".repeat(this.current_party.members.length).padEnd(this.capacity, " ")}]`;
+    }
   }
 }
 
@@ -76,52 +69,12 @@ export class Person {
   public readonly id: number;
   public readonly name: string;
   public readonly age: number;
-  public readonly party!: Party; // ! assertion since we set it right after we make a Person
-
-  private current_table: Table | undefined;
 
   constructor(id: number, name: string, age: number) {
+    assert(age > 0);
     this.id = id;
     this.name = name;
     this.age = age;
-  }
-
-  public setParty(party: Party): void {
-    (this as any).party = party;
-  }
-
-  /**
-   * The person sits down at the specified table if possible. Throws an
-   * exception if they were already sitting there or somewhere else, or
-   * if the table is full.
-   */
-  public sitDown(table: Table) : void {
-    if (this.current_table === table) { 
-      throw new Error(`${this.name} is already sitting at table ${table.id}!`);
-    }
-
-    if (this.current_table) {
-      throw new Error(`${this.name} is already sitting at another table!`);
-    }
-
-    if (!table.addPatron(this)) {
-      throw new Error(`Table ${table.id} is full!`);
-    }
-
-    this.current_table = table;
-  }
-
-  /**
-   * The person leaves the specified table.
-   * Throws an exception if they weren't actually sitting there.
-   */
-  public leaveTable(table: Table) : void {
-    if (this.current_table !== table) {
-      throw new Error(`${this.name} wasn't sitting here!`);
-    }
-    else {
-      this.current_table = undefined;
-    }
   }
 
 }
@@ -132,22 +85,12 @@ export class Person {
  * Represents a party of people coming to the restaurant together.
  */
 export class Party {
-  private members: Person[];
-  public readonly diningTime: DiningTime;
-  public readonly actualDiningTime: number;
+  public readonly members: readonly Person[];
+  public readonly diningDuration: number;
 
-  constructor(members: Person[], diningTime: DiningTime, randomizer: Randomizer) {
+  constructor(members: Person[], diningDuration: number) {
     this.members = members;
-    this.diningTime = diningTime;
-    this.actualDiningTime = diningTime.interpolate(randomizer);
-  }
-
-  public getMembers(): Person[] {
-    return this.members;
-  }
-
-  public partySize(): number {
-    return this.members.length;
+    this.diningDuration = diningDuration;
   }
 }
 
@@ -158,7 +101,7 @@ export class Party {
  * Manages the seating of new parties from the queue as tables are available.
  */
 export class Restaurant {
-  private tables: Table[];
+  private tables: Table[]; // can have 1 assigned party
   private waitingQueue: Party[];
   private currentTime: number = 0;
   private totalServed: number = 0;
@@ -178,17 +121,11 @@ export class Restaurant {
   }
 
   public getWaitingPatronCount(): number {
-    return this.waitingQueue.reduce((sum, party) => sum + party.partySize(), 0);
+    return this.waitingQueue.reduce((sum, party) => sum + party.members.length, 0);
   }
 
   public nextAvailableTable(): Table | undefined {
     return this.tables.find(table => !table.isOccupied());
-  }
-
-  public seatParty(party: Party, table: Table): void {
-    for (const person of party.getMembers()) {
-      person.sitDown(table);
-    }
   }
 
   public simulateStep(timeStep: number): void {
@@ -196,7 +133,8 @@ export class Restaurant {
 
     // Check each table to see if patrons are done dining
     for (const table of this.tables) {
-      if (table.arePatronsFinished(this.currentTime)) {
+      // if there is a party and it's finished, clear
+      if (table.isFinished(this.currentTime)) {
         table.clearTable();
       }
     }
@@ -204,14 +142,14 @@ export class Restaurant {
     // Try to seat waiting parties
     while (this.waitingQueue.length > 0) {
       const nextParty = this.waitingQueue.shift()!; // ! assertion since we just checked length
-      const table = this.nextAvailableTable();
+      const table = this.nextAvailableTable(); // UPDATE THIS ALGORITHM
       if (!table) {
         break; // No more available tables
       }
 
       try {
-        this.seatParty(nextParty, table); // throws if we can't seat them
-        this.totalServed += nextParty.partySize();
+        table.setParty(nextParty, this.currentTime); // throws if we can't seat them
+        this.totalServed += nextParty.members.length;
       }
       catch (e) {
         // If we can't seat them, put them back in the queue
