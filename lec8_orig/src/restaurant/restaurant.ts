@@ -1,11 +1,11 @@
 import { Randomizer } from "./randomization";
 import { PartyGenerator } from "./party-generator";
-import { assert } from "../../util/util";
+import { assert } from "../util/util";
+
 
 
 // The DiningTime class has been renamed to RandomDurationDist
 // and moved to the party-generator.ts file.
-
 
 
 /**
@@ -80,6 +80,10 @@ class RestaurantSeating {
     this.n_available_tables = tables.length;
   }
 
+  public getTableAssignments(): { table: Table, assignment: TableAssignment | undefined }[] {
+    return this.table_assns;
+  }
+
   public assignIfPossible(party: Party, startTime: number): TableAssignment | undefined {
     
     const suitable_table = this.table_assns.find(ta => !ta.assignment && ta.table.capacity >= party.members.length);
@@ -151,6 +155,18 @@ export class Restaurant {
     return this.waitingQueue.reduce((sum, party) => sum + party.members.length, 0);
   }
 
+  public getTableAssignments(): { table: Table, assignment: TableAssignment | undefined }[] {
+    return this.seating.getTableAssignments();
+  }
+
+  public getCurrentTime(): number {
+    return this.currentTime;
+  }
+
+  public getTotalServed(): number {
+    return this.totalServed;
+  }
+
   public simulateStep(timeStep: number): void {
     this.currentTime += timeStep;
 
@@ -184,56 +200,3 @@ export class Restaurant {
   }
 
 }
-
-
-
-function main(): void {
-  // Create a randomizer for the simulation
-  const randomizer = Randomizer.create_from_seed("restaurant-sim");
-
-  // Create tables with different capacities
-  const tables = [
-    new Table(1, 2),  // Table for 2
-    new Table(2, 2),  // Table for 2
-    new Table(3, 4),  // Table for 4
-    new Table(4, 4),  // Table for 4
-    new Table(5, 6),  // Table for 6
-  ];
-
-  // Create the restaurant
-  const restaurant = new Restaurant(tables);
-
-  console.log("=== Restaurant Simulation ===");
-  console.log(`Tables: ${tables.length}`);
-  console.log("");
-
-  // Simulation parameters
-  const duration = 240; // 4 hours until closing
-  const timeStep = 5;
-
-  const partyGenerator = new PartyGenerator(randomizer, {
-    arrivalRate: 0.4,
-    minPartySize: 1,
-    maxPartySize: 6,
-    minDiningTime: 30,
-    maxDiningTime: 90
-  });
-
-  let partyCount = 0;
-
-  for (let time = 0; time <= duration; time += timeStep) {
-    // Generate new parties randomly throughout the simulation
-    const newParty = partyGenerator.generateParty();
-    if (newParty) {
-      restaurant.addToWaitingQueue(newParty);
-      partyCount++;
-    }
-
-    restaurant.simulateStep(timeStep);
-
-    restaurant.printReport();
-  }
-
-}
-
-main();

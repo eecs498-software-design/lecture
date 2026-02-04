@@ -1,5 +1,5 @@
 import { Randomizer } from "./randomization";
-import { Party, Person } from "./restaurant";
+import { Person, Party } from "./restaurant";
 
 /**
  * Represents distribution over random dining durations.
