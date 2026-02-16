@@ -1,93 +1,12 @@
+import { assertNever } from "../../util/util";
+
 // DOM types for these examples (normally provided by lib: ["dom"])
 declare const document: { getElementById(id: string): HTMLElement | null };
 declare interface HTMLElement { textContent: string | null; }
 
 // ============================================
-// OBSERVER PATTERN - Car Example
-// ============================================
-
-interface CarObserver {
-  onSpeedUpdate(speed: number): void;
-  onStopped(): void;
-}
-
-class Car {
-  private observers: CarObserver[] = [];
-  private speed: number = 0;
-
-  // The Car (Subject) maintains a list of observers
-  public addObserver(observer: CarObserver) {
-    this.observers.push(observer);
-  }
-
-  public setSpeed(newSpeed: number) {
-    const wasStopped = this.speed === 0;
-    this.speed = newSpeed;
-    
-    // Notify all observers of the speed change
-    this.observers.forEach(obs => obs.onSpeedUpdate(newSpeed));
-    
-    // If the car just came to a stop, notify observers
-    if (newSpeed === 0 && !wasStopped) {
-      this.observers.forEach(obs => obs.onStopped());
-    }
-  }
-
-  public getSpeed() {
-    return this.speed;
-  }
-}
-
-// Usage Example
-const car = new Car();
-
-class Dashboard implements CarObserver {
-  private speedGauge: HTMLElement;
-  private statusIndicator: HTMLElement;
-  // ... other UI elements ...
-
-  public constructor(container: HTMLElement) {
-    // ... create UI elements, implementation not shown ...
-    this.speedGauge = container; // placeholder
-    this.statusIndicator = container; // placeholder
-  }
-
-  // ... other Dashboard methods not shown ...
-
-  onSpeedUpdate(speed: number) {
-    this.speedGauge.textContent = `${speed} mph`;
-  }
-
-  onStopped() {
-    this.statusIndicator.textContent = "STOPPED";
-  }
-}
-
-const dashboardContainer = document.getElementById("dashboard")!;
-const dashboard = new Dashboard(dashboardContainer);
-
-const safetySystem: CarObserver = {
-  onSpeedUpdate: (speed) => {
-    if (speed > 80) console.log(`Safety: Warning! Speed exceeds 80 mph`);
-  },
-  onStopped: () => {} // No action needed on stop for safety system
-};
-
-car.addObserver(dashboard);
-car.addObserver(safetySystem);
-
-car.setSpeed(60);  // Dashboard shows speed, safety system quiet
-car.setSpeed(90);  // Dashboard shows speed, safety system warns
-car.setSpeed(0);   // Both observers notified of stop
-
-
-
-
-
-
-
-// ============================================
 // PUB/SUB PATTERN - Car Example
+// (With different types for each topic)
 // ============================================
 
 // Map each topic to its data type
@@ -100,12 +19,17 @@ type CarTopicData = {
 
 type CarTopic = keyof CarTopicData;
 
-interface Subscriber<T> {
-  onUpdate(data: T): void;
+interface SubscriptionEvent<Topic_t extends CarTopic> {
+  topic: Topic_t;
+  data: CarTopicData[Topic_t];
+}
+
+interface Subscriber<Topic_t extends CarTopic> {
+  onUpdate(event: SubscriptionEvent<Topic_t>): void;
 }
 
 class Broker {
-  private topics: { [K in CarTopic]: Subscriber<CarTopicData[K]>[] } = {
+  private topics: { [T in CarTopic]: Subscriber<T>[] } = {
     speed: [],
     engine_status: [],
     fuel_level: [],
@@ -113,12 +37,12 @@ class Broker {
   };
 
   // The "Broker" manages the communication
-  subscribe<T extends CarTopic>(topic: T, cb: Subscriber<CarTopicData[T]>) {
-    (this.topics[topic] as Subscriber<CarTopicData[T]>[]).push(cb);
+  subscribe<T extends CarTopic>(topic: T, cb: Subscriber<T>) {
+    (this.topics[topic] as Subscriber<T>[]).push(cb);
   }
 
   publish<T extends CarTopic>(topic: T, data: CarTopicData[T]) {
-    (this.topics[topic] as Subscriber<CarTopicData[T]>[]).forEach(cb => cb.onUpdate(data));
+    (this.topics[topic] as Subscriber<T>[]).forEach(cb => cb.onUpdate({ topic, data }));
   }
 }
 
@@ -139,7 +63,8 @@ const broker = new Broker();
 const car2 = new Car2(broker);
 
 // Dashboard subscribes to speed and fuel
-class DashboardSubscriber implements Subscriber<number> {
+type DashboardTopics = "speed" | "fuel_level" | "door_status";
+class DashboardSubscriber implements Subscriber<DashboardTopics> {
   private displayPanel: HTMLElement;
   // ... other UI elements ...
 
@@ -150,8 +75,18 @@ class DashboardSubscriber implements Subscriber<number> {
 
   // ... other Dashboard methods not shown ...
 
-  onUpdate(data: number) {
-    this.displayPanel.textContent = `${data} mph`;
+  onUpdate(event: SubscriptionEvent<DashboardTopics>) {
+    if (event.topic === "speed") {
+      this.displayPanel.textContent = `${event.data} mph`;
+    } else if (event.topic === "fuel_level") {
+      this.displayPanel.textContent = `Fuel: ${event.data}%`;
+    } else if (event.topic === "door_status") {
+      if (event.data === "open") {
+        this.displayPanel.textContent = "Door Open!";
+      }
+    } else {
+      assertNever(event.topic);
+    }
   }
 }
 
@@ -161,14 +96,18 @@ broker.subscribe("speed", dashboardSubscriber);
 broker.subscribe("fuel_level", dashboardSubscriber);  // Also works - both are number
 
 // Security system only cares about doors
-const securitySubscriber: Subscriber<"open" | "closed"> = {
-  onUpdate: (data) => console.log(`Security system: Door ${data}`)
+const securitySubscriber: Subscriber<"door_status"> = {
+  onUpdate: (event) => {
+    console.log(`Security system: Door ${event.data}`);
+  }
 };
 broker.subscribe("door_status", securitySubscriber);
 
 // Engine monitor subscribes to engine status
-const engineMonitor: Subscriber<{ rpm: number; running: boolean }> = {
-  onUpdate: (data) => console.log(`Engine: ${data.running ? "running" : "off"} at ${data.rpm} RPM`)
+const engineMonitor: Subscriber<"engine_status"> = {
+  onUpdate: (event) => {
+    console.log(`Engine: ${event.data.running ? "running" : "off"} at ${event.data.rpm} RPM`);
+  }
 };
 broker.subscribe("engine_status", engineMonitor);
 

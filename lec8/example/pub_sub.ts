@@ -9,7 +9,7 @@ declare interface HTMLElement { textContent: string | null; }
 type CarTopic = "speed" | "engine_status" | "fuel_level" | "door_status";
 
 interface Subscriber {
-  onUpdate(data: string): void;
+  onUpdate(topic: string, data: string): void;
 }
 
 class Broker {
@@ -26,7 +26,7 @@ class Broker {
   }
 
   publish(topic: CarTopic, data: string) {
-    this.topics[topic].forEach(cb => cb.onUpdate(data));
+    this.topics[topic].forEach(cb => cb.onUpdate(topic, data));
   }
 }
 
