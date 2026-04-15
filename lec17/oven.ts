@@ -1,0 +1,83 @@
+import { Pizza } from "./pizza";
+import { currentSimTime } from "./util";
+
+export class Oven {
+
+  private oven_id: string;
+
+  private currentJob?: {
+    pizza: Pizza;
+    startTime: number;
+  } | undefined = undefined;
+
+  public constructor(oven_id: string) {
+    this.oven_id = oven_id;
+  }
+
+  public bakeBlocking(pizza: Pizza): void {
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
+    const endTime = Date.now() + pizza.bakeTime;
+    while (Date.now() < endTime) {
+      // busy wait - blocks the event loop!
+    }
+    pizza.isBaked = true;
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
+  }
+
+  public startBaking(pizza: Pizza): void {
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
+    this.currentJob = {
+      pizza,
+      startTime: Date.now(),
+    };
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Started baking!`));
+  }
+  
+  public isAvailable(): boolean {
+    return this.currentJob === undefined;
+  }
+
+  public checkIfDone(): boolean {
+    if (!this.currentJob) return false;
+    
+    if (Date.now() - this.currentJob.startTime >= this.currentJob.pizza.bakeTime) {
+      this.currentJob.pizza.isBaked = true;
+      this.currentJob = undefined; // Oven is now free
+      return true;
+    }
+    return false; // Still baking
+  }
+
+  public bakeWithCallback(pizza: Pizza, callback: () => void): void {
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
+    setTimeout(() => {
+      pizza.isBaked = true;
+      console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
+      callback();
+    }, pizza.bakeTime);
+  }
+
+  public bakeWithPromise(pizza: Pizza): Promise<void> {
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        pizza.isBaked = true;
+        console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
+        resolve();
+      }, pizza.bakeTime);
+    });
+  }
+
+  async bakeAsync(pizza: Pizza): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, pizza.bakeTime));
+    pizza.isBaked = true;
+  }
+}
+
+export const THE_FOUR_OVENS = [
+  new Oven("Oven 1"), new Oven("Oven 2"), new Oven("Oven 3"), new Oven("Oven 4")
+] as const;
+
+export function findAvailableOven(): Oven | undefined {
+  return THE_FOUR_OVENS.find(oven => oven.isAvailable());
+}

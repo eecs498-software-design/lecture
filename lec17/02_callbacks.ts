@@ -7,100 +7,63 @@
  * THE PHONE ADVANTAGE: With callbacks and the event loop, phone calls are
  * just another event! They get queued and processed automatically.
  * No calls are missed because the event loop handles everything.
+ * 
+ * Note: Individual prep steps (dough, each topping, boxing) are still synchronous.
+ * But we use callbacks between steps to yield to the event loop.
  */
 
-import { INCOMING_ORDERS, ORDER_COLORS, Order, formatElapsed, printCallRinging, printCallAnswered } from "./phone";
+import { THE_FOUR_OVENS } from "./oven";
+import { checkPhone, hasOrdersRemaining } from "./phone";
+import { addTopping, boxPizza, createPizza, Pizza, prepareDough, TOPPINGS } from "./pizza";
+import { currentSimTime, printHeader } from "./util";
 
-function doWorkAndThen(ms: number, callback: () => void): void {
-  setTimeout(callback, ms);
-}
-
-const TIMES = {
-  prepareDough: 1500,
-  addToppings: 1000,
-  bake: 2000,
-  box: 500,
-};
-
-let startTime: number;
-function elapsed(): string {
-  return formatElapsed(startTime);
-}
-
-// ============================================
-// Order queue - populated by answering phone
-// ============================================
-
-type QueuedOrder = Order & { color: (s: string) => string };
-const orderQueue: QueuedOrder[] = [];
-let nextColorIndex = 0;
-let activePizzas = 0;
-
-function schedulePhoneCalls(): void {
-  for (const order of INCOMING_ORDERS) {
-    setTimeout(() => {
-      printCallRinging(order);
-      printCallAnswered(startTime);
-      const queued: QueuedOrder = { ...order, color: ORDER_COLORS[nextColorIndex++ % ORDER_COLORS.length]! };
-      orderQueue.push(queued);
-      processNextOrder(); // Try to start making it
-    }, order.time);
+function addAllToppings(pizza: Pizza, toppings: string[], callback: () => void): void {
+  if (toppings.length === 0) {
+    callback();
+    return;
   }
+  
+  const [first, ...rest] = toppings;
+  addTopping(pizza, first!); // Synchronous
+  setTimeout(() => {         // Yield to event loop, then continue
+    addAllToppings(pizza, rest, callback);
+  }, 0);
 }
 
-// ============================================
-// Making pizzas with callbacks
-// ============================================
-
-function makePizza(order: QueuedOrder, onComplete: () => void) {
-  const { color } = order;
-  console.log(color(`[${elapsed()}] Starting: ${order.pizzaType} for ${order.customer}`));
+function preparePizza(pizza: Pizza, onComplete: () => void): void {
+  console.log(pizza.color(`[${currentSimTime()}] Starting: ${pizza.pizzaKind} for ${pizza.customer}`));
   
-  console.log(color(`[${elapsed()}]   Preparing dough...`));
-  doWorkAndThen(TIMES.prepareDough,
-    () => {
-      console.log(color(`[${elapsed()}]   Adding toppings...`));
-      doWorkAndThen(TIMES.addToppings,
-        () => {
-        console.log(color(`[${elapsed()}]   Baking...`));
-        doWorkAndThen(TIMES.bake,
-          () => { // I/O bound, asynchronous, non-blocking
-          console.log(color(`[${elapsed()}]   Boxing...`));
-          doWorkAndThen(TIMES.box,
-            () => {
-            console.log(color(`[${elapsed()}] ✓ Done! ${order.pizzaType} ready for ${order.customer}`));
-            onComplete();
-          });
-        });
+  prepareDough(pizza); // Synchronous
+  
+  setTimeout(() => { // Yield to event loop
+    addAllToppings(pizza, TOPPINGS[pizza.pizzaKind], () => {
+      THE_FOUR_OVENS[0].bakeWithCallback(pizza, () => {
+        boxPizza(pizza); // Synchronous
+        console.log(pizza.color(`[${currentSimTime()}] ✓ Done! ${pizza.pizzaKind} ready for ${pizza.customer}`));
+        onComplete();
       });
-    }
-  );
-}
-
-function processNextOrder() {
-  if (orderQueue.length === 0) return;
-  
-  const order = orderQueue.shift()!;
-  activePizzas++;
-  
-  makePizza(order, () => {
-    activePizzas--;
-    if (activePizzas > 0 || orderQueue.length > 0) {
-      processNextOrder();
-    }
-  });
+    });
+  }, 0);
 }
 
 // ============================================
 // Demo
 // ============================================
 
-console.log("=".repeat(60));
-console.log("Pizza Restaurant - Callback-Based Approach");
-console.log("=".repeat(60));
-console.log();
+function main() {
+  printHeader("Pizza Restaurant - Callback-Based Approach");
+  while(hasOrdersRemaining()) {
+    const order = checkPhone();
+    if (order) {
+      const pizza = createPizza(order);
+      preparePizza(pizza, () => {
+        console.log(`Pizza complete!`);
+      });
+    }
+  }
+  console.log(`[${currentSimTime()}] Done`);
+}
 
-startTime = Date.now();
-schedulePhoneCalls();
+main();
 
 export {};

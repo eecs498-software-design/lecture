@@ -14,109 +14,44 @@
  * During I/O polling, we yield frequently and can answer.
  */
 
-import { INCOMING_ORDERS, CALL_TIMEOUT, ORDER_COLORS, Order, formatElapsed, printCallRinging, printCallAnswered, printCallMissed } from "./phone";
+import { findAvailableOven, Oven } from "./oven";
+import { checkPhone, hasOrdersRemaining } from "./phone";
+import { addTopping, boxPizza, createPizza, Pizza, prepareDough } from "./pizza";
+import { currentSimTime, printHeader } from "./util";
 
-type Coroutine = Generator<void, void, void>;
+type Coroutine = Generator<unknown, void, void>;
 
-const TIMES = {
-  prepareDough: 1500,  // CPU-bound: cook works
-  addToppings: 1000,   // CPU-bound: cook works
-  bake: 2000,          // I/O-bound: oven works, cook can do other things
-  box: 500,            // CPU-bound: cook works
-};
-
-let startTime: number;
-function elapsed(): string {
-  return formatElapsed(startTime);
-}
-
-// ============================================
-// Order queue - populated by answering phone
-// ============================================
-
-type QueuedOrder = Order & { color: (s: string) => string };
-const orderQueue: QueuedOrder[] = [];
-const handledCalls = new Set<number>();
-let nextColorIndex = 0;
-
-function checkPhone(): void {
-  const now = Date.now() - startTime;
-  
-  for (let i = 0; i < INCOMING_ORDERS.length; i++) {
-    const order = INCOMING_ORDERS[i]!;
-    if (handledCalls.has(i)) continue;
-    
-    if (now >= order.time && now < order.time + CALL_TIMEOUT) {
-      printCallRinging(order);
-      printCallAnswered(startTime);
-      orderQueue.push({ ...order, color: ORDER_COLORS[nextColorIndex++ % ORDER_COLORS.length]! });
-      handledCalls.add(i);
-    }
-    else if (now >= order.time + CALL_TIMEOUT) {
-      printCallMissed(startTime, order);
-      handledCalls.add(i);
-    }
+function* addAllToppings(pizza: Pizza): Coroutine {
+  for (const topping of pizza.toppings) {
+    addTopping(pizza, topping);
+    yield; // Yield after each topping
   }
 }
 
-// ============================================
-// Oven and work simulation
-// ============================================
-
-class Oven {
-  private doneAt: number | null = null;
-  
-  startBaking(durationMs: number): void {
-    this.doneAt = Date.now() + durationMs;
+function* bakeWithPolling(pizza: Pizza): Coroutine {
+  let oven: Oven | undefined;
+  while (!(oven = findAvailableOven())) {
+    yield; // No oven available, yield and try again
   }
   
-  checkIfDone(): boolean {
-    return this.doneAt !== null && Date.now() >= this.doneAt;
-  }
-}
-
-/**
- * CPU-bound work: busy waits for the duration.
- * This blocks - no other coroutine can run, can't answer phone!
- */
-function doCpuWork(durationMs: number): void {
-  const endTime = Date.now() + durationMs;
-  while (Date.now() < endTime) {
-    // busy wait
-  }
-}
-
-/**
- * A generator function that models making a single pizza.
- */
-function* makePizza(order: QueuedOrder): Coroutine {
-  const { color } = order;
-  console.log(color(`[${elapsed()}] Starting: ${order.pizzaType} for ${order.customer}`));
-  
-  // CPU-bound: cook is working (BLOCKS - can't answer phone!)
-  console.log(color(`[${elapsed()}]   Preparing dough...`));
-  doCpuWork(TIMES.prepareDough);
-  yield;
-  
-  console.log(color(`[${elapsed()}]   Adding toppings...`));
-  doCpuWork(TIMES.addToppings);
-  yield;
-  
-  // I/O-bound: oven does the work (yields frequently - CAN answer phone!)
-  console.log(color(`[${elapsed()}]   In oven...`));
-  const oven = new Oven();
-  oven.startBaking(TIMES.bake);
-  
+  oven.startBaking(pizza);
   while (!oven.checkIfDone()) {
-    yield; // Let scheduler check phone and run other tasks
+    yield; // Yield frequently while waiting
   }
-  console.log(color(`[${elapsed()}]   Out of oven!`));
+}
+
+function* preparePizza(pizza: Pizza): Coroutine {
+  console.log(pizza.color(`[${currentSimTime()}] Starting: ${pizza.pizzaKind} for ${pizza.customer}`));  
+
+  prepareDough(pizza);
+  yield;
+
+  yield* addAllToppings(pizza);
+  yield* bakeWithPolling(pizza);
+
+  boxPizza(pizza);
   
-  // CPU-bound again
-  console.log(color(`[${elapsed()}]   Boxing...`));
-  doCpuWork(TIMES.box);
-  
-  console.log(color(`[${elapsed()}] ✓ Done! ${order.pizzaType} ready for ${order.customer}`));
+  console.log(pizza.color(`[${currentSimTime()}] ✓ Done! ${pizza.pizzaKind} ready for ${pizza.customer}`));
 }
 
 /**
@@ -124,47 +59,37 @@ function* makePizza(order: QueuedOrder): Coroutine {
  * Checks phone at each yield point!
  */
 function runScheduler() {
-  const tasks: Coroutine[] = [];
-  
-  while (tasks.length > 0 || handledCalls.size < INCOMING_ORDERS.length) {
-    checkPhone(); // Can answer phone between yields
-    
-    // Start new pizzas from queue
-    while (orderQueue.length > 0) {
-      tasks.push(makePizza(orderQueue.shift()!));
+  const task_queue: Coroutine[] = [];
+
+  while (task_queue.length > 0 || hasOrdersRemaining()) {
+    // Check phone directly each iteration
+    const order = checkPhone();
+    if (order) {
+      task_queue.push(preparePizza(createPizza(order)));
     }
     
-    // Run each active task once
-    for (let i = tasks.length - 1; i >= 0; i--) {
-      const result = tasks[i]!.next();
-      if (result.done) {
-        tasks.splice(i, 1);
+    // Run one step of one task
+    const nextTask = task_queue.shift();
+    if (nextTask) {
+      const result = nextTask.next();
+      if (!result.done) {
+        task_queue.push(nextTask); // Not finished, put it back in the queue
       }
     }
   }
   
-  console.log(`\n[${elapsed()}] Restaurant closing!`);
+  console.log(`\n[${currentSimTime()}] Done`);
 }
 
 // ============================================
 // Demo
 // ============================================
 
-console.log("=".repeat(60));
-console.log("Pizza Restaurant - Generator/Coroutine Approach");
-console.log("=".repeat(60));
-console.log();
+function main() {
+  printHeader("Pizza Restaurant - Generator/Coroutine Approach");
+  runScheduler();
+}
 
-startTime = Date.now();
-runScheduler();
-
-console.log();
-console.log("=".repeat(60));
-console.log("Key Observations:");
-console.log("- CPU-bound work BLOCKS - can't answer phone during prep!");
-console.log("- I/O-bound work (baking) yields frequently - can answer phone");
-console.log("- Calls during CPU work time out and are MISSED");
-console.log("- Calls during I/O polling are ANSWERED");
-console.log("=".repeat(60));
+main();
 
 export {};

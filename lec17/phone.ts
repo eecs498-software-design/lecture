@@ -6,6 +6,8 @@
  */
 
 import colors from "colors";
+import { PizzaKind } from "./pizza";
+import { currentSimTime } from "./util";
 
 // Color choices for different orders
 export const ORDER_COLORS = [
@@ -14,54 +16,67 @@ export const ORDER_COLORS = [
 ];
 
 export interface Order {
-  time: number;       // when the call comes in (ms from start)
+  time: number;
   customer: string;
   pizzaType: string;
+  color: colors.Color;
+}
+
+let nextColorIndex = 0;
+export function createOrder(simTime: number, customer: string, pizzaType: PizzaKind): Order {
+  const color = ORDER_COLORS[nextColorIndex]!;
+  nextColorIndex = (nextColorIndex + 1) % ORDER_COLORS.length;
+  
+  return { time: simTime, customer, pizzaType, color };
 }
 
 // Incoming orders (via phone) - same for all examples
 // Timing designed so synchronous version misses Bob's call (comes during baking)
-export const INCOMING_ORDERS: Order[] = [
-  { time: 0, customer: "Alice", pizzaType: "Pepperoni" },
-  { time: 2600, customer: "Bob", pizzaType: "Margherita" },   // During Alice's bake - will be missed by sync!
-  { time: 5500, customer: "Carol", pizzaType: "Hawaiian" },
-  { time: 10000, customer: "David", pizzaType: "Veggie" },
+const INCOMING_ORDERS: Order[] = [
+  createOrder(0, "Alice", "Pepperoni"),
+  createOrder(2600, "Bob", "Margherita"),
+  createOrder(5500, "Carol", "Hawaiian"),
+  createOrder(10000, "David", "Veggie"),
 ];
 
 // How long a call rings before the customer hangs up
 export const CALL_TIMEOUT = 1500;
 
-/**
- * Format elapsed time since start.
- */
-export function formatElapsed(startTime: number): string {
-  return `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
-}
-
-/**
- * Print that a call is ringing (shows when call started).
- */
-export function printCallRinging(order: Order): void {
-  const callStartTime = (order.time / 1000).toFixed(1);
-  console.log(colors.bgYellow.black(
-    `[${callStartTime}s] 📞 ${order.customer} is calling to order a ${order.pizzaType}...`
+function printCallAnswered(order: Order): void {
+  console.log(order.color(
+    `[${currentSimTime()}] ✓ Order taken: ${order.customer}. (Waited ${currentSimTime() - order.time} on hold.)`
   ));
 }
 
-/**
- * Print that a call was answered (shows current time).
- */
-export function printCallAnswered(startTime: number): void {
-  console.log(colors.bgGreen.black(
-    `[${formatElapsed(startTime)}] ✓ Order taken!`
+function printCallMissed(order: Order): void {
+  console.log(order.color(
+    `[${currentSimTime()}] ✗ Order missed: ${order.customer}. (Waited ${currentSimTime() - order.time} then hung up.)`
   ));
 }
 
-/**
- * Print that a call was missed (customer hung up).
- */
-export function printCallMissed(startTime: number, order: Order): void {
-  console.log(colors.bgRed.white(
-    `[${formatElapsed(startTime)}] ✗ ${order.customer} hung up! (waited ${CALL_TIMEOUT}ms, order lost)`
-  ));
+const orderQueue: Order[] = INCOMING_ORDERS.slice();
+export function checkPhone(): Order | undefined {
+
+  if (orderQueue.length === 0) {
+    return undefined; // No calls waiting
+  }
+
+  const nextOrder = orderQueue[0]!;
+  if (currentSimTime() < nextOrder.time) {
+    return undefined; // No calls waiting yet
+  }
+  
+  if (currentSimTime() - nextOrder.time > CALL_TIMEOUT) {
+    printCallMissed(nextOrder);
+    orderQueue.shift(); // Remove from queue
+    return undefined; // Missed call
+  } else {
+    printCallAnswered(nextOrder);
+    return orderQueue.shift(); // Remove from queue and return order
+  }
+
+}
+
+export function hasOrdersRemaining() {
+  return orderQueue.length > 0;
 }
