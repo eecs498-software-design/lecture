@@ -54,6 +54,7 @@ export class Oven {
       pizza.isBaked = true;
       console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
       callback();
+      notifyNextWaiter();  // Notify waitlist
     }, pizza.bakeTime);
   }
 
@@ -64,6 +65,7 @@ export class Oven {
         pizza.isBaked = true;
         console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
         resolve();
+        notifyNextWaiter();  // Notify waitlist
       }, pizza.bakeTime);
     });
   }
@@ -80,4 +82,50 @@ export const THE_FOUR_OVENS = [
 
 export function findAvailableOven(): Oven | undefined {
   return THE_FOUR_OVENS.find(oven => oven.isAvailable());
+}
+
+// ============================================
+// Waitlist-based oven allocation (for callbacks/promises)
+// ============================================
+
+type OvenCallback = (oven: Oven) => void;
+const ovenWaitlist: OvenCallback[] = [];
+
+function notifyNextWaiter(): void {
+  if (ovenWaitlist.length === 0) return;
+  
+  const oven = findAvailableOven();
+  if (oven) {
+    const callback = ovenWaitlist.shift()!;
+    callback(oven);
+  }
+}
+
+/**
+ * Request an oven via callback. If one is available now, callback is
+ * invoked immediately (via setTimeout to stay async). Otherwise, you're
+ * added to the waitlist and notified when an oven becomes free.
+ */
+export function requestOvenWithCallback(callback: OvenCallback): void {
+  const oven = findAvailableOven();
+  if (oven) {
+    setTimeout(() => callback(oven), 0);  // Keep it async
+  } else {
+    ovenWaitlist.push(callback);
+  }
+}
+
+/**
+ * Request an oven via promise. Resolves when an oven is available.
+ */
+export function requestOvenWithPromise(): Promise<Oven> {
+  return new Promise(resolve => requestOvenWithCallback(resolve));
+}
+
+/**
+ * Call this when an oven finishes baking to notify waiters.
+ * Used internally by bakeWithCallback/bakeWithPromise.
+ */
+export function ovenBecameAvailable(): void {
+  notifyNextWaiter();
 }

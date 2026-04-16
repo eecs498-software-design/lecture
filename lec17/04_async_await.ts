@@ -5,14 +5,14 @@
  * code look and feel like synchronous code. This is the modern approach
  * and what you should use in most cases.
  * 
- * THE PHONE ADVANTAGE: Same as callbacks - the event loop handles
- * phone calls automatically. But the code is MUCH cleaner to read!
+ * ERROR HANDLING: Use try/catch just like synchronous code!
+ * This is the cleanest syntax - looks exactly like sync error handling.
  * 
  * Note: Individual prep steps are still synchronous.
  * But we use await between steps to yield to the event loop.
  */
 
-import { THE_FOUR_OVENS } from "./oven";
+import { requestOvenWithPromise } from "./oven";
 import { checkPhone, hasOrdersRemaining } from "./phone";
 import { addTopping, boxPizza, createPizza, Pizza, prepareDough, TOPPINGS } from "./pizza";
 import { currentSimTime, printHeader } from "./util";
@@ -28,7 +28,7 @@ async function addAllToppings(pizza: Pizza): Promise<void> {
   }
 }
 
-async function preparePizza(pizza: Pizza): Promise<void> {
+async function preparePizza(pizza: Pizza): Promise<void> { // may throw
   console.log(pizza.color(`[${currentSimTime()}] Starting: ${pizza.pizzaKind} for ${pizza.customer}`));
   
   prepareDough(pizza); // Synchronous
@@ -36,7 +36,8 @@ async function preparePizza(pizza: Pizza): Promise<void> {
   
   await addAllToppings(pizza);
   
-  await THE_FOUR_OVENS[0].bakeWithPromise(pizza);
+  const oven = await requestOvenWithPromise();  // Wait for an available oven
+  await oven.bakeWithPromise(pizza); // might throw
   
   boxPizza(pizza); // Synchronous
   
@@ -47,8 +48,21 @@ async function preparePizza(pizza: Pizza): Promise<void> {
 // Demo
 // ============================================
 
+// Retry helper using try/catch - cleanest syntax!
+async function makePizzaWithRetry(pizza: Pizza): Promise<void> {
+  while (true) {
+    try {
+      await preparePizza(pizza);
+      return; // Success!
+    } catch (err) {
+      console.log(pizza.color(`[${currentSimTime()}] ⚠ Bake failed for ${pizza.customer}, retrying...`));
+      // Loop will retry
+    }
+  }
+}
+
 async function main() {
-  printHeader("Pizza Restaurant - Async/Await Approach");
+  printHeader("Pizza Restaurant - Async/Await Approach (Error Handling)");
   
   const activePizzas: Promise<void>[] = [];
   
@@ -57,7 +71,7 @@ async function main() {
     const order = checkPhone();
     if (order) {
       const pizza = createPizza(order);
-      activePizzas.push(preparePizza(pizza));
+      activePizzas.push(makePizzaWithRetry(pizza));
     }
     await delay(0); // Yield to event loop
   }
