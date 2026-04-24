@@ -49,30 +49,48 @@ export class Oven {
   }
 
   public bakeWithCallback(pizza: Pizza, callback: () => void): void {
+    this.currentJob = {
+      pizza,
+      startTime: Date.now(),
+    };
     console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
     setTimeout(() => {
       pizza.isBaked = true;
       console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
       callback();
+      this.currentJob = undefined; // Oven is now free
       notifyNextWaiter();  // Notify waitlist
     }, pizza.bakeTime);
   }
 
   public bakeWithPromise(pizza: Pizza): Promise<void> {
+    this.currentJob = {
+      pizza,
+      startTime: Date.now(),
+    };
     console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
     return new Promise((resolve) => {
       setTimeout(() => {
         pizza.isBaked = true;
         console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
         resolve();
+        this.currentJob = undefined; // Oven is now free
         notifyNextWaiter();  // Notify waitlist
       }, pizza.bakeTime);
     });
   }
 
   async bakeAsync(pizza: Pizza): Promise<void> {
+    this.currentJob = {
+      pizza,
+      startTime: Date.now(),
+    };
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Baking...`));
     await new Promise((resolve) => setTimeout(resolve, pizza.bakeTime));
     pizza.isBaked = true;
+    console.log(pizza.color(`[${currentSimTime()}, ${pizza.customer}, ${this.oven_id}]   Pizza baked!`));
+    this.currentJob = undefined; // Oven is now free
+    notifyNextWaiter();  // Notify waitlist
   }
 }
 
@@ -120,12 +138,4 @@ export function requestOvenWithCallback(callback: OvenCallback): void {
  */
 export function requestOvenWithPromise(): Promise<Oven> {
   return new Promise(resolve => requestOvenWithCallback(resolve));
-}
-
-/**
- * Call this when an oven finishes baking to notify waiters.
- * Used internally by bakeWithCallback/bakeWithPromise.
- */
-export function ovenBecameAvailable(): void {
-  notifyNextWaiter();
 }
