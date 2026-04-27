@@ -1,7 +1,12 @@
 
+// Summary:
+// This version intentionally uses a shallower menu abstraction: prompt once,
+// throw on invalid input, and let callers recover with try/catch.
+// It is useful for discussing vexing exceptions, semantic coupling between
+// menu labels and control flow, and where EAFP/LBYL tradeoffs appear.
+
 import * as readline from "node:readline/promises";
 import * as fs from "node:fs";
-import { assert } from "node:console";
 
 class Menu {
   private items: string[] = [];
@@ -44,15 +49,26 @@ class CatchPhrases {
   constructor(filename: string) {
     this.phrases = new Map<string, string>();
 
-    // EAFP vs. LBYL??
+    // [EAFP vs. LBYL?] Attempt to read a file that might be missing.
+    //
     // LBYL is technically not safe here, since the file could be deleted
     // between the check and the read. This is an exogenous error, and EAFP
-    // is the safest. However, for a low-stakes application (e.g. a simple
-    // CLI tool), it is probably fine to LBYL. In other cases, e.g. making
-    // a web request, we definitely can't rely on LBYL.
-    if (fs.existsSync(filename)) { // look
+    // is the only way to ensure an error is handled gracefully.
+    // 
+    // However, for a low-stakes application (e.g. a simple CLI tool) and
+    // where it is unlikely for the file to go missing in between the two
+    // calls, it's common to see LYBL in the wild. The worse case is that the
+    // subsequent fs.readFileSync() throws with an ultimately uncaught exception.
+    // 
+    // In other cases, e.g. making a web request, it ins't clear how we would
+    // even try to LYBL (i.e. send a first request to ask if a subsequent
+    // request would succeed??), or we may just choose to prioritize complete
+    // safety and use EAFP.
+    //
+    // The example below shows LBYL. (See the improved file for an EAFP version.)
+    if (fs.existsSync(filename)) { // "look" first
       // what if someone deletes the file? This could still throw
-      const text = fs.readFileSync(filename, "utf-8"); // leap
+      const text = fs.readFileSync(filename, "utf-8"); // "then" leap
       this.parse_input(text);
     } else {
       console.log(`${filename} not found, using fallback phrases`);
@@ -60,15 +76,51 @@ class CatchPhrases {
   }
 
   private parse_input(file_contents: string): void {
-    // EAFP vs. LBYL??
-    // LBYL is completely safe here, since we control the string.
-    // If an exception is thrown, it's a preventable bug. In that case,
-    // we should just fix it, not add a try/catch.
+    // [EAFP vs. LBYL?] Extract substrings before/after ": " from a
+    // potentially malformed string.
+    //
+    // First, the call to line.indexOf() is technically an EAFP.
+    // We don't need to check if the separator exists, we just plan to
+    // respond to the -1 "error" result (returned via "errors as values"
+    // rather than a thrown exception) by ignoring malformed lines.
+    //
+    // Checking for -1 then becomes the "look" part of the substring code.
+    // LBYL is completely safe here, since we can inspect the string.
+    // If an exception were to be thrown, it's a preventable bug.
+    // In that case, we should just fix it, not add a try/catch.
+    //
+    // Finally, note that in JavaScript, .substring() never throws
+    // exceptions - it just ignores out-of-bounds parts of the given
+    // range. Is this "safe", such that we don't need to LBYL? Nope!
+    // For example, assume we have the malformed line "Batman, I'm Batman"
+    // There is no ": ", so line.indexOf(": ") returns -1, meaning sep = -1.
+    // Then, we have:
+    //   this.phrases.set(line.substring(0, sep), line.substring(sep + 2));
+    //                         ^        (0, -1 )       ^        (-1 + 2 ) 
+    //                         |                       |                  
+    //                      returns ""              returns "atman, I'm Batman"
+    // And now a random entry with a key of "" and a value of "atman, I'm Batman"
+    // is added to our catch phrases. That could certainly cause problems.
+    //
+    // There's an insidious issue here if we had tried to use EAFP. We could
+    // have even wrapped the code up in a try/catch that makes it appear like
+    // we are ignoring invalid entries, but if .substring() never actually throws
+    // to report a problem to us, we don't get the chance to "ask forgiveness".
+    // So, we also need to be mindful of "will this actually check what I give it?".
     for (const line of file_contents.split("\n")) {
-      const sep = line.indexOf(": "); // look
-      if (sep !== -1) {
-        this.phrases.set(line.substring(0, sep), line.substring(sep + 2)); // leap (preventable)
+      const sep = line.indexOf(": "); // EAFP, but must check for -1 later
+      if (sep !== -1) { // look "first"
+        this.phrases.set(line.substring(0, sep), line.substring(sep + 2)); // then leap
       }
+      // Otherwise ignore the line
+
+      // This EAFP approach would be insidiously broken! (see comments above)
+      // try {
+      //   const sep = line.indexOf(": ");
+      //   this.phrases.set(line.substring(0, sep), line.substring(sep + 2));
+      // } catch {
+      //   // ignore malformed lines
+      // }
     }
   }
 

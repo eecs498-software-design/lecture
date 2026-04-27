@@ -1,4 +1,10 @@
 
+// Summary:
+// This version refactors the menu into a deeper abstraction that re-prompts
+// internally and binds each menu title to its action.
+// The result removes most vexing exceptions from call sites, reduces fragile
+// string-based coupling, and localizes invariants in menu construction.
+
 import * as readline from "node:readline/promises";
 import * as fs from "node:fs";
 
@@ -65,31 +71,34 @@ class CatchPhrases {
   constructor(filename: string) {
     this.phrases = new Map<string, string>();
 
-    // EAFP vs. LBYL??
-    // LBYL is technically not safe here, since the file could be deleted
-    // between the check and the read. This is an exogenous error, and EAFP
-    // is the safest. However, for a low-stakes application (e.g. a simple
-    // CLI tool), it is probably fine to LBYL. In other cases, e.g. making
-    // a web request, we definitely can't rely on LBYL.
-    if (fs.existsSync(filename)) { // look
-      // what if someone deletes the file? This could still throw
-      const text = fs.readFileSync(filename, "utf-8"); // leap
+    // [EAFP vs. LBYL?] Attempt to read a file that might be missing.
+    //
+    // We should use EAFP here, since a failure to read the file is an
+    // exogenous error that is not fully preventable by our code (even if
+    // we check for the file's existence first, it could disappear before
+    // we read it).
+    //
+    // The code below implements EAFP. (See the original file for LBYL.)
+    try {
+      // attempt read - no need to "ask permission" first
+      // with fs.existsSync() or similar
+      const text = fs.readFileSync(filename, "utf-8");
       this.parse_input(text);
-    } else {
+    } catch {
+      // "ask forgiveness" by handling the error
       console.log(`${filename} not found, using fallback phrases`);
     }
   }
 
   private parse_input(file_contents: string): void {
-    // EAFP vs. LBYL??
-    // LBYL is completely safe here, since we control the string.
-    // If an exception is thrown, it's a preventable bug. In that case,
-    // we should just fix it, not add a try/catch.
+    // [EAFP vs. LBYL?] See the "original" file for a detailed
+    // discussion of EAFP vs. LBYL in this context.
     for (const line of file_contents.split("\n")) {
-      const sep = line.indexOf(": "); // look
-      if (sep !== -1) {
-        this.phrases.set(line.substring(0, sep), line.substring(sep + 2)); // leap (preventable)
+      const sep = line.indexOf(": "); // EAFP, but must check for -1 later
+      if (sep !== -1) { // look first
+        this.phrases.set(line.substring(0, sep), line.substring(sep + 2)); // then leap
       }
+      // Otherwise ignore the line
     }
   }
 
